@@ -12,9 +12,9 @@ defmodule TripleSec.Pbkdf2 do
     when length >= @max_length,
     do: raise ArgumentError, message: "length should be less than #{@max_length}"
 
-  # def pbkdf2(_pass, salt, _iterations, _length, _prf)
-  #   when not byte_size(salt) in @salt_range,
-  #   do: raise ArgumentError, message: "salt size should be within #{inspect @salt_range}"
+  def pbkdf2(_pass, salt, _iterations, _length, _prf)
+    when not byte_size(salt) in @salt_range,
+    do: raise ArgumentError, message: "salt size should be within #{inspect @salt_range}"
 
   def pbkdf2(pass, salt, iterations, length, prf),
     do: pbkdf2(pass, salt, iterations, length, prf, 1, [], 0)
