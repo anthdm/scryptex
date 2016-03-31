@@ -1,56 +1,91 @@
 defmodule TripleSec.Salsa20 do
   use Bitwise
 
-  @int32_max :math.pow(2, 32) |> trunc
+  @int32_max 1 <<< 32
+
+  @compile {:inline, sum: 2, rotl: 2}
 
   defp sum(x, y), do: (x+y) &&& (@int32_max-1)
-  defp rotl(x, n), do: ((x<<<n) ||| (x>>>(32-n))) &&& (@int32_max-1)
+  defp rotl(x, n), do: (x<<<n ||| (x>>>(32-n))) &&& (@int32_max-1)
 
-  @doc false
-  def quarterround(y0, y1, y2, y3) do
-    z1 = y1 ^^^ (sum(y0, y3) |> rotl(7))
-    z2 = y2 ^^^ (sum(z1, y0) |> rotl(9))
-    z3 = y3 ^^^ (sum(z2, z1) |> rotl(13))
-    z0 = y0 ^^^ (sum(z3, z2) |> rotl(18))
+  def hash(input, rounds \\ 20)
 
-    {z0, z1, z2, z3}
+  def hash(input, _rounds) when byte_size(input) != 64,
+    do: raise ArgumentError, message: "input has to be 64 bytes"
+
+  def hash(_input, rounds) when rem(rounds, 2) != 0,
+    do: raise ArgumentError, message: "rounds has to be dividable by 2"
+
+  def hash(input, rounds) do
+    # NOTE: This is 5-10% slower than manually inlining core/2 in this function
+
+    <<x0::32,  x1::32,  x2::32,  x3::32,
+      x4::32,  x5::32,  x6::32,  x7::32,
+      x8::32,  x9::32,  x10::32, x11::32,
+      x12::32, x13::32, x14::32, x15::32>> =
+    for(<<x::little-32 <- input>>, into: "", do: <<x::32>>) |> core(rounds)
+
+    <<x0::little-32,  x1::little-32,  x2::little-32,  x3::little-32,
+      x4::little-32,  x5::little-32,  x6::little-32,  x7::little-32,
+      x8::little-32,  x9::little-32,  x10::little-32, x11::little-32,
+      x12::little-32, x13::little-32, x14::little-32, x15::little-32>>
   end
 
-  @doc false
-  def rowround({y0, y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15}) do
-    { z0,  z1,  z2,  z3} = quarterround( y0,  y1,  y2,  y3)
-    { z5,  z6,  z7,  z4} = quarterround( y5,  y6,  y7,  y4)
-    {z10, z11,  z8,  z9} = quarterround(y10, y11,  y8,  y9)
-    {z15, z12, z13, z14} = quarterround(y15, y12, y13, y14)
+  def core(input, rounds \\ 20)
 
-    {z0, z1, z2, z3, z4, z5, z6, z7, z8, z9, z10, z11, z12, z13, z14, z15}
-  end
+  def core(input, _rounds) when byte_size(input) != 64,
+    do: raise ArgumentError, message: "input has to be 64 bytes"
 
-  @doc false
-  def columnround({x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15}) do
-    { y0,  y4,  y8, y12} = quarterround( x0,  x4,  x8, x12)
-    { y5,  y9, y13,  y1} = quarterround( x5,  x9, x13,  x1)
-    {y10, y14,  y2,  y6} = quarterround(x10, x14,  x2,  x6)
-    {y15,  y3,  y7, y11} = quarterround(x15,  x3,  x7, x11)
+  def core(_input, rounds) when rem(rounds, 2) != 0,
+    do: raise ArgumentError, message: "rounds has to be dividable by 2"
 
-    {y0, y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15}
-  end
+  def core(input, rounds) do
+    original = for(<<x::32 <- input>>, do: x) |> List.to_tuple
+    {y0, y1, y2, y3, y4, y5, y6, y7, y8, y9, y10, y11, y12, y13, y14, y15} = original
 
-  def doubleround(x), do: x |> columnround |> rowround
+    {x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15} =
+      Enum.reduce(1..div(rounds, 2), original, fn _, tuple ->
+        {x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15} = tuple
 
-  defp doublerounds(x, 0), do: x
-  defp doublerounds(x, n), do: x |> doubleround |> doublerounds(n-1)
+        u = sum(x0 , x12); x4  = x4  ^^^ rotl(u, 7)
+        u = sum(x4 , x0 ); x8  = x8  ^^^ rotl(u, 9)
+        u = sum(x8 , x4 ); x12 = x12 ^^^ rotl(u, 13)
+        u = sum(x12, x8 ); x0  = x0  ^^^ rotl(u, 18)
+        u = sum(x5 , x1 ); x9  = x9  ^^^ rotl(u, 7)
+        u = sum(x9 , x5 ); x13 = x13 ^^^ rotl(u, 9)
+        u = sum(x13, x9 ); x1  = x1  ^^^ rotl(u, 13)
+        u = sum(x1 , x13); x5  = x5  ^^^ rotl(u, 18)
+        u = sum(x10, x6 ); x14 = x14 ^^^ rotl(u, 7)
+        u = sum(x14, x10); x2  = x2  ^^^ rotl(u, 9)
+        u = sum(x2 , x14); x6  = x6  ^^^ rotl(u, 13)
+        u = sum(x6 , x2 ); x10 = x10 ^^^ rotl(u, 18)
+        u = sum(x15, x11); x3  = x3  ^^^ rotl(u, 7)
+        u = sum(x3 , x15); x7  = x7  ^^^ rotl(u, 9)
+        u = sum(x7 , x3 ); x11 = x11 ^^^ rotl(u, 13)
+        u = sum(x11, x7 ); x15 = x15 ^^^ rotl(u, 18)
+        u = sum(x0 , x3 ); x1  = x1  ^^^ rotl(u, 7)
+        u = sum(x1 , x0 ); x2  = x2  ^^^ rotl(u, 9)
+        u = sum(x2 , x1 ); x3  = x3  ^^^ rotl(u, 13)
+        u = sum(x3 , x2 ); x0  = x0  ^^^ rotl(u, 18)
+        u = sum(x5 , x4 ); x6  = x6  ^^^ rotl(u, 7)
+        u = sum(x6 , x5 ); x7  = x7  ^^^ rotl(u, 9)
+        u = sum(x7 , x6 ); x4  = x4  ^^^ rotl(u, 13)
+        u = sum(x4 , x7 ); x5  = x5  ^^^ rotl(u, 18)
+        u = sum(x10, x9 ); x11 = x11 ^^^ rotl(u, 7)
+        u = sum(x11, x10); x8  = x8  ^^^ rotl(u, 9)
+        u = sum(x8 , x11); x9  = x9  ^^^ rotl(u, 13)
+        u = sum(x9 , x8 ); x10 = x10 ^^^ rotl(u, 18)
+        u = sum(x15, x14); x12 = x12 ^^^ rotl(u, 7)
+        u = sum(x12, x15); x13 = x13 ^^^ rotl(u, 9)
+        u = sum(x13, x12); x14 = x14 ^^^ rotl(u, 13)
+        u = sum(x14, x13); x15 = x15 ^^^ rotl(u, 18)
 
-  def hash(input, rounds \\ 20) when byte_size(input) == 64 and rem(rounds, 2) == 0 do
-    x = for(<<word::little-32 <- input>>, do: word)
+        {x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15}
+      end)
 
-    z =
-      List.to_tuple(x)
-      |> doublerounds(div(rounds, 2))
-      |> Tuple.to_list
-
-    Enum.zip(x, z)
-    |> Enum.map(fn {xn, yn} -> <<sum(xn, yn)::little-32>> end)
-    |> IO.iodata_to_binary
+    <<sum(y0,  x0)::32,  sum(y1,  x1)::32,  sum(y2,  x2)::32,  sum(y3,  x3)::32,
+      sum(y4,  x4)::32,  sum(y5,  x5)::32,  sum(y6,  x6)::32,  sum(y7,  x7)::32,
+      sum(y8,  x8)::32,  sum(y9,  x9)::32,  sum(y10, x10)::32, sum(y11, x11)::32,
+      sum(y12, x12)::32, sum(y13, x13)::32, sum(y14, x14)::32, sum(y15, x15)::32>>
   end
 end
