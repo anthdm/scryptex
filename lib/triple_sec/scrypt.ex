@@ -7,8 +7,8 @@ defmodule TripleSec.Scrypt do
   @unit 4
   @hash_size 64
 
-  def scrypt(pass, salt, cost, parallel, c, length) do
-    scrypt(pass, salt, cost, parallel, 1, length)
+  def scrypt(pass, salt, cost, r, parallel, length) do
+    scrypt(pass, salt, cost, r, parallel, 1, length)
   end
 
   def scrypt(pass, salt, cost, r, parallel, c, length) do
