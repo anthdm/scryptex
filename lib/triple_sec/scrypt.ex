@@ -7,9 +7,13 @@ defmodule TripleSec.Scrypt do
   @unit 4
   @hash_size 64
 
+  def scrypt(pass, salt, cost, parallel, c, length) do
+    scrypt(pass, salt, cost, parallel, 1, length)
+  end
+
   def scrypt(pass, salt, cost, r, parallel, c, length) do
-    mflen = 128*r
-    blocks = pbkdf2(pass, salt, c, mflen*parallel, &:crypto.hmac(:sha256, &1, &2))
+    mflen = 128 * r
+    blocks = pbkdf2(pass, salt, c, mflen * parallel, &:crypto.hmac(:sha256, &1, &2))
 
     blocks = for <<x::32 <- blocks>>, into: "", do: <<x::little-32>>
 
@@ -25,22 +29,24 @@ defmodule TripleSec.Scrypt do
   def smix(block, cost, r, mflen) do
     {vs, block} =
       Enum.reduce(1..cost, {[], block}, fn _, {vs, block} ->
-        {[block|vs], blockmix_salsa8(block, mflen)}
+        {[block | vs], blockmix_salsa8(block, mflen)}
       end)
 
-    vs = vs |> Enum.reverse |> List.to_tuple
+    vs = vs |> Enum.reverse() |> List.to_tuple()
 
-    block = Enum.reduce(1..cost, block, fn _, block ->
-      j = integerify(block, r, cost)
-      vj = elem(vs, j)
-      :crypto.exor(block, vj) |> blockmix_salsa8(mflen)
-    end)
+    block =
+      Enum.reduce(1..cost, block, fn _, block ->
+        j = integerify(block, r, cost)
+        vj = elem(vs, j)
+        :crypto.exor(block, vj) |> blockmix_salsa8(mflen)
+      end)
+
     block
   end
 
   @doc false
   def blockmix_salsa8(block, mflen) do
-    x = :binary.part(block, mflen-@hash_size, @hash_size)
+    x = :binary.part(block, mflen - @hash_size, @hash_size)
     do_blockmix_salsa8(block, 0, x, "", "")
   end
 
@@ -48,17 +54,18 @@ defmodule TripleSec.Scrypt do
     x = :crypto.exor(x, block) |> salsa8
 
     if (ix &&& 1) == 0,
-      do: do_blockmix_salsa8(rest, ix+1, x, [acc1|x], acc2),
-    else: do_blockmix_salsa8(rest, ix+1, x, acc1, [acc2|x])
+      do: do_blockmix_salsa8(rest, ix + 1, x, [acc1 | x], acc2),
+      else: do_blockmix_salsa8(rest, ix + 1, x, acc1, [acc2 | x])
   end
+
   defp do_blockmix_salsa8(<<>>, _ix, _x, acc1, acc2) do
     IO.iodata_to_binary([acc1, acc2])
   end
 
   defp integerify(block, r, cost) do
-    pos = 16*(2*r-1)*@unit
+    pos = 16 * (2 * r - 1) * @unit
     <<integer::size(@unit)-unit(8)>> = :binary.part(block, pos, @unit)
-    integer &&& (cost-1)
+    integer &&& cost - 1
   end
 
   defp salsa8(input) do
