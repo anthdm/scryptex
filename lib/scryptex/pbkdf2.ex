@@ -1,4 +1,4 @@
-defmodule TripleSec.Pbkdf2 do
+defmodule Scryptex.Pbkdf2 do
   use Bitwise
 
   @max_length (1 <<< 32) - 1

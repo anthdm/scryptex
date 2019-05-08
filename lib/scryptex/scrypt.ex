@@ -1,6 +1,6 @@
-defmodule TripleSec.Scrypt do
+defmodule Scryptex.Scrypt do
   use Bitwise
-  import TripleSec.Pbkdf2
+  import Scryptex.Pbkdf2
 
   # Based on http://tools.ietf.org/html/draft-josefsson-scrypt-kdf-01
 
@@ -69,6 +69,6 @@ defmodule TripleSec.Scrypt do
   end
 
   defp salsa8(input) do
-    TripleSec.Salsa20.core(input, 8)
+    Scryptex.Salsa20.core(input, 8)
   end
 end

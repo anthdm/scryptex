@@ -1,0 +1,2 @@
+defmodule Scryptex do
+end

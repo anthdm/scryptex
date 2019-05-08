@@ -1,2 +1,0 @@
-defmodule TripleSec do
-end
